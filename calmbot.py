@@ -236,11 +236,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Flask webhook endpoint
 @app.route('/webhook', methods=['POST'])
-async def webhook():
+def webhook():
     try:
         update = Update.de_json(request.get_json(force=True), app_telegram.bot)
         if update:
-            await app_telegram.process_update(update)
+            asyncio.run(app_telegram.process_update(update))
         return '', 200
     except Exception as e:
         logging.error(f"Webhook error: {e}")
@@ -267,4 +267,4 @@ if __name__ == "__main__":
     # Set webhook on startup
     asyncio.run(set_webhook())
     # Run Flask app
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
