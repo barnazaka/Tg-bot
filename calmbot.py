@@ -21,6 +21,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+
+# Log environment variables for debugging
+logging.info(f"TELEGRAM_TOKEN: {'Set' if TELEGRAM_TOKEN else 'Not set'}")
+logging.info(f"GOOGLE_API_KEY: {'Set' if GOOGLE_API_KEY else 'Not set'}")
+logging.info(f"RENDER_EXTERNAL_HOSTNAME: {RENDER_EXTERNAL_HOSTNAME or 'Not set'}")
+logging.info(f"PORT: {os.getenv('PORT', '10000')}")
 
 # Configure Gemini API
 genai.configure(api_key=GOOGLE_API_KEY)
@@ -239,6 +246,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def index():
     return "CalmBot is running! Use Telegram to interact with the bot.", 200
 
+# Webhook test endpoint
+@app.route('/test_webhook', methods=['GET'])
+def test_webhook():
+    webhook_url = f"https://{RENDER_EXTERNAL_HOSTNAME}/webhook"
+    return f"Webhook URL: {webhook_url}. Check logs and Telegram getWebhookInfo.", 200
+
 # Flask webhook endpoint
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -257,7 +270,7 @@ def webhook():
         return '', 500
 
 async def set_webhook():
-    webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/webhook"
+    webhook_url = f"https://{RENDER_EXTERNAL_HOSTNAME}/webhook"
     try:
         await app_telegram.bot.set_webhook(webhook_url)
         logging.info(f"Webhook set to {webhook_url}")
