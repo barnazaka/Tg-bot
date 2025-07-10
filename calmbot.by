@@ -9,10 +9,10 @@ import asyncio
 import logging
 import google.generativeai as genai
 from textblob import TextBlob
-from flask import Flask, request  # Add Flask for webhook server
+from flask import Flask, request
 
 # Setup Flask app for webhook
-flask_app = Flask(__name__)
+app = Flask(__name__)
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -26,7 +26,7 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 genai.configure(api_key=GOOGLE_API_KEY)
 gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 
-# System prompt (unchanged)
+# System prompt
 SYSTEM_PROMPT = """
 You are CalmBot, an AI companion designed to help users heal from emotional distress and unresolved trauma, often rooted in childhood wounds. Your goal is to empower users to recognize, monitor, and heal deep-rooted emotional wounds, guiding them toward inner peace amidst external chaos. For every response:
 - Acknowledge the user's emotion empathetically (e.g., happiness, sadness, anger, anxiety).
@@ -37,7 +37,7 @@ You are CalmBot, an AI companion designed to help users heal from emotional dist
 - If the input is vague, ask a gentle follow-up question to clarify their needs.
 """
 
-# Load model_log.json (unchanged)
+# Load model_log.json
 try:
     with open("model_log.json", "r", encoding="utf-8") as f:
         DATASET = json.load(f)
@@ -52,7 +52,7 @@ if not os.path.exists(UNKNOWN_INPUTS_FILE):
     with open(UNKNOWN_INPUTS_FILE, "w", encoding="utf-8") as f:
         json.dump([], f)
 
-# SQLite database setup (unchanged)
+# SQLite database setup
 def init_db():
     conn = sqlite3.connect("mood_tracker.db")
     c = conn.cursor()
@@ -61,7 +61,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Log unknown input (unchanged)
+# Log unknown input
 def log_unknown_input(user_id, user_message, is_followup=False):
     try:
         with open(UNKNOWN_INPUTS_FILE, "r", encoding="utf-8") as f:
@@ -77,15 +77,15 @@ def log_unknown_input(user_id, user_message, is_followup=False):
     with open(UNKNOWN_INPUTS_FILE, "w", encoding="utf-8") as f:
         json.dump(unknown_inputs, f, indent=2, ensure_ascii=False)
 
-# Button responses (unchanged)
+# Button responses (shortened for brevity)
 BUTTON_RESPONSES = {
-    "happiness": "...",  # Your existing responses
-    "sadness": "...",
-    "anger": "...",
-    "anxiety": "..."
+    "happiness": "Happiness is a radiant emotion, like sunlight warming your soul... Let’s keep this positive vibe going! Use /chat to share what’s making you happy or to explore more ways to stay joyful.",
+    "sadness": "Sadness can feel like a heavy cloud settling over your heart... Let’s work through this together—use /chat to share more or get additional support.",
+    "anger": "Anger is a fiery emotion, like a storm brewing inside... Let’s keep working on this together—use /chat to share more or explore additional ways to find calm.",
+    "anxiety": "Anxiety can feel like a storm in your mind... Let’s work through this together—use /chat to share more or get additional support."
 }
 
-# Generate Gemini response (unchanged)
+# Generate Gemini response
 def generate_gemini_response(user_message, prev_response=None, conversation_history=""):
     try:
         full_prompt = f"{SYSTEM_PROMPT}\n\nConversation history: {conversation_history}\n\nPrevious bot response: {prev_response or 'None'}\n\nUser input: {user_message}\n\nRespond appropriately."
@@ -97,7 +97,7 @@ def generate_gemini_response(user_message, prev_response=None, conversation_hist
         sentiment = 'positive' if analysis.sentiment.polarity > 0 else 'negative' if analysis.sentiment.polarity < 0 else 'neutral'
         return f"I hear you. Your message feels {sentiment}. Want to explore this further? Try sharing more or use /chat for support."
 
-# Map input to response (unchanged)
+# Map input to response
 def get_response(user_id, user_message, prev_response=None, context=None):
     user_message = user_message.lower().strip()
     if user_message in RESPONSE_MAP:
@@ -129,7 +129,7 @@ def get_response(user_id, user_message, prev_response=None, context=None):
         context.user_data.get("conversation_history", "")
     )
 
-# Log mood to database (unchanged)
+# Log mood to database
 def log_mood(user_id, mood, message):
     conn = sqlite3.connect("mood_tracker.db")
     c = conn.cursor()
@@ -235,7 +235,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             break
 
 # Flask webhook endpoint
-@flask_app.route('/webhook', methods=['POST'])
+@app.route('/webhook', methods=['POST'])
 async def webhook():
     update = Update.de_json(request.get_json(force=True), app.bot)
     await app.process_update(update)
@@ -246,14 +246,14 @@ async def set_webhook():
     await app.bot.setWebhook(webhook_url)
 
 # Initialize Telegram app
-app = Application.builder().token(TELEGRAM_TOKEN).read_timeout(300).write_timeout(300).connect_timeout(300).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("chat", chat))
-app.add_handler(CallbackQueryHandler(button, pattern='^(happiness|sadness|anger|anxiety)$'))
-app.add_handler(CallbackQueryHandler(post_mood_button, pattern='^(chat_after_mood|change_response)$'))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+app_telegram = Application.builder().token(TELEGRAM_TOKEN).read_timeout(300).write_timeout(300).connect_timeout(300).build()
+app_telegram.add_handler(CommandHandler("start", start))
+app_telegram.add_handler(CommandHandler("chat", chat))
+app_telegram.add_handler(CallbackQueryHandler(button, pattern='^(happiness|sadness|anger|anxiety)$'))
+app_telegram.add_handler(CallbackQueryHandler(post_mood_button, pattern='^(chat_after_mood|change_response)$'))
+app_telegram.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
 if __name__ == "__main__":
     init_db()
     # Run Flask app
-    flask_app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
