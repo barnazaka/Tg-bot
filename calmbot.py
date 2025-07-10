@@ -2,7 +2,7 @@ import sqlite3
 import os
 import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, Filters, ContextTypes
 from telegram.error import TimedOut, RetryAfter
 from dotenv import load_dotenv
 import asyncio
@@ -77,12 +77,12 @@ def log_unknown_input(user_id, user_message, is_followup=False):
     with open(UNKNOWN_INPUTS_FILE, "w", encoding="utf-8") as f:
         json.dump(unknown_inputs, f, indent=2, ensure_ascii=False)
 
-# Button responses (shortened for brevity)
+# Button responses
 BUTTON_RESPONSES = {
-    "happiness": "Happiness is a radiant emotion, like sunlight warming your soul... Let’s keep this positive vibe going! Use /chat to share what’s making you happy or to explore more ways to stay joyful.",
-    "sadness": "Sadness can feel like a heavy cloud settling over your heart... Let’s work through this together—use /chat to share more or get additional support.",
-    "anger": "Anger is a fiery emotion, like a storm brewing inside... Let’s keep working on this together—use /chat to share more or explore additional ways to find calm.",
-    "anxiety": "Anxiety can feel like a storm in your mind... Let’s work through this together—use /chat to share more or get additional support."
+    "happiness": "I feel the warmth of your happiness, like sunlight breaking through clouds! You're stronger than any scars you carry. To keep this joy flowing, try journaling what sparked this feeling today. Want to share more? Use /chat to dive deeper!",
+    "sadness": "I hear the weight of your sadness, and it’s okay to feel this way sometimes. You’re not alone, and your heart is resilient. Try a deep breathing exercise: inhale for 4, hold for 4, exhale for 4. Want to talk more? Use /chat to explore what’s on your mind.",
+    "anger": "Your anger is like a storm, powerful but temporary. You’re stronger than this moment. Try writing down what’s fueling it to let it go. Want to work through this together? Use /chat to share more and find calm.",
+    "anxiety": "Anxiety can feel like a tight knot, but you’re stronger than the worries you carry. Try a quick grounding exercise: name 5 things you see around you. I’m here for you. Want to talk it out? Use /chat to share what’s weighing on you."
 }
 
 # Generate Gemini response
@@ -237,13 +237,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Flask webhook endpoint
 @app.route('/webhook', methods=['POST'])
 async def webhook():
-    update = Update.de_json(request.get_json(force=True), app.bot)
-    await app.process_update(update)
+    update = Update.de_json(request.get_json(force=True), app_telegram.bot)
+    await app_telegram.process_update(update)
     return '', 200
 
 async def set_webhook():
     webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/webhook"
-    await app.bot.setWebhook(webhook_url)
+    try:
+        await app_telegram.bot.set_webhook(webhook_url)
+        logging.info(f"Webhook set to {webhook_url}")
+    except Exception as e:
+        logging.error(f"Failed to set webhook: {e}")
 
 # Initialize Telegram app
 app_telegram = Application.builder().token(TELEGRAM_TOKEN).read_timeout(300).write_timeout(300).connect_timeout(300).build()
@@ -251,9 +255,11 @@ app_telegram.add_handler(CommandHandler("start", start))
 app_telegram.add_handler(CommandHandler("chat", chat))
 app_telegram.add_handler(CallbackQueryHandler(button, pattern='^(happiness|sadness|anger|anxiety)$'))
 app_telegram.add_handler(CallbackQueryHandler(post_mood_button, pattern='^(chat_after_mood|change_response)$'))
-app_telegram.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+app_telegram.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
 
 if __name__ == "__main__":
     init_db()
+    # Set webhook on startup
+    asyncio.run(set_webhook())
     # Run Flask app
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
