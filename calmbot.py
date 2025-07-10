@@ -318,6 +318,7 @@ async def set_webhook():
 # Initialize Telegram app
 if not TELEGRAM_TOKEN:
     logging.error("Cannot initialize bot: TELEGRAM_TOKEN is not set")
+    app_telegram = None
 else:
     app_telegram = Application.builder().token(TELEGRAM_TOKEN).updater(None).build()
     app_telegram.add_handler(CommandHandler("start", start))
@@ -328,9 +329,11 @@ else:
 
 if __name__ == "__main__":
     init_db()
-    if TELEGRAM_TOKEN:
-        # Validate token and set webhook
+    if TELEGRAM_TOKEN and app_telegram:
+        # Validate token and initialize app
         if asyncio.run(validate_token()):
+            asyncio.run(app_telegram.initialize())
+            asyncio.run(app_telegram.start())
             asyncio.run(set_webhook())
         else:
             logging.error("Bot startup aborted due to invalid TELEGRAM_TOKEN")
