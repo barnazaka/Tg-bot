@@ -237,9 +237,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Flask webhook endpoint
 @app.route('/webhook', methods=['POST'])
 async def webhook():
-    update = Update.de_json(request.get_json(force=True), app_telegram.bot)
-    await app_telegram.process_update(update)
-    return '', 200
+    try:
+        update = Update.de_json(request.get_json(force=True), app_telegram.bot)
+        if update:
+            await app_telegram.process_update(update)
+        return '', 200
+    except Exception as e:
+        logging.error(f"Webhook error: {e}")
+        return '', 500
 
 async def set_webhook():
     webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/webhook"
@@ -250,7 +255,7 @@ async def set_webhook():
         logging.error(f"Failed to set webhook: {e}")
 
 # Initialize Telegram app
-app_telegram = Application.builder().token(TELEGRAM_TOKEN).read_timeout(300).write_timeout(300).connect_timeout(300).build()
+app_telegram = Application.builder().token(TELEGRAM_TOKEN).updater(None).build()
 app_telegram.add_handler(CommandHandler("start", start))
 app_telegram.add_handler(CommandHandler("chat", chat))
 app_telegram.add_handler(CallbackQueryHandler(button, pattern='^(happiness|sadness|anger|anxiety)$'))
