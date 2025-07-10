@@ -2,7 +2,7 @@ import sqlite3
 import os
 import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, Filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from telegram.error import TimedOut, RetryAfter
 from dotenv import load_dotenv
 import asyncio
@@ -255,7 +255,7 @@ app_telegram.add_handler(CommandHandler("start", start))
 app_telegram.add_handler(CommandHandler("chat", chat))
 app_telegram.add_handler(CallbackQueryHandler(button, pattern='^(happiness|sadness|anger|anxiety)$'))
 app_telegram.add_handler(CallbackQueryHandler(post_mood_button, pattern='^(chat_after_mood|change_response)$'))
-app_telegram.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+app_telegram.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
 if __name__ == "__main__":
     init_db()
