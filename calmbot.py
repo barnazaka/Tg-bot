@@ -234,16 +234,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("An error occurred. Please try again.")
             break
 
+# Root endpoint for debugging
+@app.route('/')
+def index():
+    return "CalmBot is running! Use Telegram to interact with the bot.", 200
+
 # Flask webhook endpoint
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
+        logging.info("Received webhook request")
         update = Update.de_json(request.get_json(force=True), app_telegram.bot)
         if update:
+            logging.info(f"Processing update: {update}")
             asyncio.run(app_telegram.process_update(update))
+            logging.info("Update processed successfully")
+        else:
+            logging.warning("No valid update received")
         return '', 200
     except Exception as e:
-        logging.error(f"Webhook error: {e}")
+        logging.error(f"Webhook error: {str(e)}")
         return '', 500
 
 async def set_webhook():
@@ -252,7 +262,7 @@ async def set_webhook():
         await app_telegram.bot.set_webhook(webhook_url)
         logging.info(f"Webhook set to {webhook_url}")
     except Exception as e:
-        logging.error(f"Failed to set webhook: {e}")
+        logging.error(f"Failed to set webhook: {str(e)}")
 
 # Initialize Telegram app
 app_telegram = Application.builder().token(TELEGRAM_TOKEN).updater(None).build()
