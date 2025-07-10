@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import json
+import aiohttp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from telegram.error import TimedOut, RetryAfter
@@ -28,6 +29,21 @@ logging.info(f"TELEGRAM_TOKEN: {'Set' if TELEGRAM_TOKEN else 'Not set'}")
 logging.info(f"GOOGLE_API_KEY: {'Set' if GOOGLE_API_KEY else 'Not set'}")
 logging.info(f"RENDER_EXTERNAL_HOSTNAME: {RENDER_EXTERNAL_HOSTNAME or 'Not set'}")
 logging.info(f"PORT: {os.getenv('PORT', '10000')}")
+
+# Validate TELEGRAM_TOKEN
+async def validate_token():
+    if not TELEGRAM_TOKEN:
+        logging.error("TELEGRAM_TOKEN is not set")
+        return False
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getMe") as response:
+                data = await response.json()
+                logging.info(f"Token validation response: {data}")
+                return data.get("ok", False)
+        except Exception as e:
+            logging.error(f"Token validation failed: {str(e)}")
+            return False
 
 # Configure Gemini API
 genai.configure(api_key=GOOGLE_API_KEY)
@@ -252,6 +268,17 @@ def test_webhook():
     webhook_url = f"https://{RENDER_EXTERNAL_HOSTNAME}/webhook"
     return f"Webhook URL: {webhook_url}. Check logs and Telegram getWebhookInfo.", 200
 
+# Manual webhook setup endpoint
+@app.route('/set_webhook', methods=['GET'])
+def manual_set_webhook():
+    webhook_url = f"https://{RENDER_EXTERNAL_HOSTNAME}/webhook"
+    try:
+        asyncio.run(set_webhook())
+        return f"Webhook setup attempted: {webhook_url}. Check logs and getWebhookInfo.", 200
+    except Exception as e:
+        logging.error(f"Manual webhook setup failed: {str(e)}")
+        return f"Failed to set webhook: {str(e)}", 500
+
 # Flask webhook endpoint
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -271,23 +298,41 @@ def webhook():
 
 async def set_webhook():
     webhook_url = f"https://{RENDER_EXTERNAL_HOSTNAME}/webhook"
-    try:
-        await app_telegram.bot.set_webhook(webhook_url)
-        logging.info(f"Webhook set to {webhook_url}")
-    except Exception as e:
-        logging.error(f"Failed to set webhook: {str(e)}")
+    retries = 3
+    for attempt in range(retries):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={webhook_url}") as response:
+                    data = await response.json()
+                    logging.info(f"Webhook setup response: {data}")
+                    if data.get("ok", False):
+                        return
+                    else:
+                        logging.error(f"Webhook setup failed: {data}")
+        except Exception as e:
+            logging.error(f"Webhook setup attempt {attempt + 1}/{retries} failed: {str(e)}")
+        if attempt < retries - 1:
+            await asyncio.sleep(2 ** attempt)
+    logging.error("Failed to set webhook after retries")
 
 # Initialize Telegram app
-app_telegram = Application.builder().token(TELEGRAM_TOKEN).updater(None).build()
-app_telegram.add_handler(CommandHandler("start", start))
-app_telegram.add_handler(CommandHandler("chat", chat))
-app_telegram.add_handler(CallbackQueryHandler(button, pattern='^(happiness|sadness|anger|anxiety)$'))
-app_telegram.add_handler(CallbackQueryHandler(post_mood_button, pattern='^(chat_after_mood|change_response)$'))
-app_telegram.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+if not TELEGRAM_TOKEN:
+    logging.error("Cannot initialize bot: TELEGRAM_TOKEN is not set")
+else:
+    app_telegram = Application.builder().token(TELEGRAM_TOKEN).updater(None).build()
+    app_telegram.add_handler(CommandHandler("start", start))
+    app_telegram.add_handler(CommandHandler("chat", chat))
+    app_telegram.add_handler(CallbackQueryHandler(button, pattern='^(happiness|sadness|anger|anxiety)$'))
+    app_telegram.add_handler(CallbackQueryHandler(post_mood_button, pattern='^(chat_after_mood|change_response)$'))
+    app_telegram.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
 if __name__ == "__main__":
     init_db()
-    # Set webhook on startup
-    asyncio.run(set_webhook())
+    if TELEGRAM_TOKEN:
+        # Validate token and set webhook
+        if asyncio.run(validate_token()):
+            asyncio.run(set_webhook())
+        else:
+            logging.error("Bot startup aborted due to invalid TELEGRAM_TOKEN")
     # Run Flask app
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
